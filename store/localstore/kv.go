@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"encoding/binary"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/kv"
@@ -184,6 +185,15 @@ func (s *dbStore) doCommit(txn *dbTxn) error {
 		}
 		return nil
 	})
+	binlogData := txn.us.GetOption(kv.BinlogData)
+	if binlogData != nil {
+		key := make([]byte, 9)
+		key[0] = 'b'
+		binary.BigEndian.PutUint64(key[1:], commitVer.Ver)
+		// As local store encode binlog key in its own way, we do not put the binlog prefix 'b' in tablecodec.
+		mvccKey := MvccEncodeVersionKey(kv.Key(key), commitVer)
+		b.Put(mvccKey, binlogData.([]byte))
+	}
 	err = s.writeBatch(b)
 	if err != nil {
 		return errors.Trace(err)

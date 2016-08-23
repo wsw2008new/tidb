@@ -566,7 +566,6 @@ func (s *testIndexSuite) TestAddIndex(c *C) {
 	c.Assert(err, IsNil)
 
 	testCreateTable(c, ctx, d, s.dbInfo, tblInfo)
-
 	t := testGetTable(c, d, s.dbInfo.ID, tblInfo.ID)
 
 	row := types.MakeDatums(int64(1), int64(2), int64(3))

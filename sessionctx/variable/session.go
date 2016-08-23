@@ -14,11 +14,13 @@
 package variable
 
 import (
+	"strings"
+
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/util/types"
-	"strings"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 const (
@@ -107,6 +109,8 @@ type SessionVars struct {
 
 	// InUpdateStmt indicates if the session is handling update stmt.
 	InUpdateStmt bool
+
+	Binlog *binlog.Binlog
 }
 
 // sessionVarsKeyType is a dummy type to avoid naming collision in context.

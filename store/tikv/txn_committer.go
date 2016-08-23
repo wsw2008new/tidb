@@ -237,7 +237,12 @@ func (c *txnCommitter) commitSingleRegion(bo *Backoffer, batch batchKeys) error 
 			CommitVersion: c.commitTS,
 		},
 	}
-
+	if bytes.Equal(batch.keys[0], c.primary()) {
+		binlogData := c.txn.us.GetOption(kv.BinlogData)
+		if binlogData != nil {
+			req.CmdCommitReq.Binlog = binlogData.([]byte)
+		}
+	}
 	resp, err := c.store.SendKVReq(bo, req, batch.region)
 	if err != nil {
 		return errors.Trace(err)

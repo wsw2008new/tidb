@@ -184,10 +184,12 @@ func (s *session) finishTxn(rollback bool) error {
 	if s.txn == nil {
 		return nil
 	}
+	sessVar := variable.GetSessionVars(s)
 	defer func() {
 		s.ClearValue(executor.DirtyDBKey)
 		s.txn = nil
-		variable.GetSessionVars(s).SetStatusFlag(mysql.ServerStatusInTrans, false)
+		sessVar.SetStatusFlag(mysql.ServerStatusInTrans, false)
+		sessVar.Binlog = nil
 		// Update tps metrics
 		if !variable.GetSessionVars(s).RetryInfo.Retrying {
 			tpsMetrics.Add(1)
@@ -199,7 +201,13 @@ func (s *session) finishTxn(rollback bool) error {
 		s.cleanRetryInfo()
 		return s.txn.Rollback()
 	}
-
+	if sessVar.Binlog != nil {
+		binlogData, err := sessVar.Binlog.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		s.txn.SetOption(kv.BinlogData, binlogData)
+	}
 	err := s.txn.Commit()
 	if err != nil {
 		if !variable.GetSessionVars(s).RetryInfo.Retrying && kv.IsRetryableError(err) {

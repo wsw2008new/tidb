@@ -32,8 +32,10 @@ import (
 	"github.com/pingcap/tidb/sessionctx/autocommit"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/testleak"
 	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 var _ = Suite(&testSessionSuite{})
@@ -2553,4 +2555,69 @@ func (s *testSessionSuite) TestSelectHaving(c *C) {
 	mustExecMatch(c, se, sql, [][]interface{}{{"1", fmt.Sprintf("%v", []byte("hello"))}})
 	mustExecMultiSQL(c, se, "select * from select_having_test group by id having null is not null;")
 	mustExecMultiSQL(c, se, "drop table select_having_test")
+}
+
+// Test local binlog has been written correctly.
+func (s *testSessionSuite) TestLocalBinlog(c *C) {
+	defer testleak.AfterTest(c)()
+	table := "local_binlog"
+	initSQL := fmt.Sprintf(`use test;
+		drop table if exists %[1]s;
+		create table %[1]s (id int primary key, name varchar(10));
+	`, table)
+	store := newStore(c, s.dbName)
+	se := newSession(c, store, s.dbName)
+	mustExecMultiSQL(c, se, initSQL)
+	mustExecSQL(c, se, "insert local_binlog values (1, 'abc'), (2, 'cde')")
+	bin := getLatestBinlog(c, store)
+	c.Assert(bin.SchemaVersion, Greater, int64(0))
+	c.Assert(bin.Mutations[0].TableId, Greater, int64(0))
+	c.Assert(bin.Mutations[0].InsertedIds, DeepEquals, []int64{1, 2})
+	mustExecSQL(c, se, "update local_binlog set name = 'xyz' where id = 2")
+	bin = getLatestBinlog(c, store)
+	c.Assert(bin.Mutations[0].UpdatedIds, DeepEquals, []int64{2})
+
+	mustExecSQL(c, se, "delete from local_binlog where id = 1")
+	bin = getLatestBinlog(c, store)
+	c.Assert(bin.Mutations[0].DeletedIds, DeepEquals, []int64{1})
+
+	// Test table primary key is not integer.
+	mustExecSQL(c, se, "create table local_binlog2 (name varchar(64) primary key)")
+	mustExecSQL(c, se, "insert local_binlog2 values ('abc'), ('def')")
+	mustExecSQL(c, se, "delete from local_binlog2 where name = 'def'")
+	bin = getLatestBinlog(c, store)
+	_, deletedPK, _ := codec.DecodeOne(bin.Mutations[0].DeletedPks[0])
+	c.Assert(deletedPK.GetString(), Equals, "def")
+
+	// Test Table don't have primary key.
+	mustExecSQL(c, se, "create table local_binlog3 (c1 int, c2 int)")
+	mustExecSQL(c, se, "insert local_binlog3 values (1, 2), (1, 3), (2, 3)")
+	mustExecSQL(c, se, "delete from local_binlog3 where c2 = 3")
+
+	bin = getLatestBinlog(c, store)
+	deletedRow1, _ := codec.Decode(bin.Mutations[0].DeletedRows[0], 2)
+	c.Assert(deletedRow1, DeepEquals, types.MakeDatums(1, 3))
+	deletedRow2, _ := codec.Decode(bin.Mutations[0].DeletedRows[1], 2)
+	c.Assert(deletedRow2, DeepEquals, types.MakeDatums(2, 3))
+}
+
+func getLatestBinlog(c *C, store kv.Storage) *binlog.Binlog {
+	txn, err := store.Begin()
+	c.Assert(err, IsNil)
+	it, err := txn.Seek([]byte("b"))
+	c.Assert(errors.ErrorStack(err), Equals, "")
+	var val []byte
+	for it.Valid() {
+		if it.Key()[0] != 'b' {
+			break
+		}
+		val = it.Value()
+		c.Assert(it.Next(), IsNil)
+	}
+	it.Close()
+	txn.Commit()
+	bin := new(binlog.Binlog)
+	err = bin.Unmarshal(val)
+	c.Assert(err, IsNil)
+	return bin
 }
