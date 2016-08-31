@@ -48,6 +48,7 @@ var (
 	reportStatus = flag.Bool("report-status", true, "If enable status report HTTP service.")
 	logFile      = flag.String("log-file", "", "log file path")
 	joinCon      = flag.Int("join-concurrency", 5, "the number of goroutines that participate joining.")
+	binlog       = flag.Bool("binlog", true, "save binlog.")
 )
 
 func main() {

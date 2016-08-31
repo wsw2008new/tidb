@@ -2596,9 +2596,9 @@ func (s *testSessionSuite) TestLocalBinlog(c *C) {
 
 	bin = getLatestBinlog(c, store)
 	deletedRow1, _ := codec.Decode(bin.Mutations[0].DeletedRows[0], 2)
-	c.Assert(deletedRow1, DeepEquals, types.MakeDatums(1, 3))
+	c.Assert(deletedRow1[1], DeepEquals, types.NewIntDatum(3))
 	deletedRow2, _ := codec.Decode(bin.Mutations[0].DeletedRows[1], 2)
-	c.Assert(deletedRow2, DeepEquals, types.MakeDatums(2, 3))
+	c.Assert(deletedRow2[1], DeepEquals, types.NewIntDatum(3))
 }
 
 func getLatestBinlog(c *C, store kv.Storage) *binlog.Binlog {
