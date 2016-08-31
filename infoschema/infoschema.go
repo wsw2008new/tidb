@@ -22,11 +22,10 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	//"github.com/pingcap/tidb/perfschema"
+	"github.com/pingcap/tidb/perfschema"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/terror"
 	// import table implementation to init table.TableFromMeta
-	"github.com/pingcap/tidb/perfschema"
 	_ "github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/types"
 )

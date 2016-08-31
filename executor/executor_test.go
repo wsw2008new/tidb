@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/sessionctx/schemaverion"
+	"github.com/pingcap/tidb/sessionctx/schemaversion"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util/mock"
@@ -401,7 +401,7 @@ func (s *testSuite) TestLoadData(c *C) {
 	c.Assert(err, IsNil)
 	fields := &ast.FieldsClause{Terminated: "\t"}
 	lines := &ast.LinesClause{Starting: "", Terminated: "\n"}
-	schemaverion.Set(ctx, 1)
+	schemaversion.Set(ctx, 1)
 	ld := executor.NewLoadDataInfo(make([]types.Datum, 4), ctx, tbl)
 	ld.FieldsInfo = fields
 	ld.LinesInfo = lines

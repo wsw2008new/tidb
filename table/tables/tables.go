@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/schemaverion"
+	"github.com/pingcap/tidb/sessionctx/schemaversion"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
@@ -704,7 +704,7 @@ func (t *Table) Seek(ctx context.Context, h int64) (int64, bool, error) {
 func (t *Table) getMutation(ctx context.Context) *binlog.TableMutation {
 	sessVar := variable.GetSessionVars(ctx)
 	if sessVar.Binlog == nil {
-		schemaVer := schemaverion.Get(ctx)
+		schemaVer := schemaversion.Get(ctx)
 		sessVar.Binlog = &binlog.Binlog{SchemaVersion: schemaVer}
 	}
 	bin := sessVar.Binlog
