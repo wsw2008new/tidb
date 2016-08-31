@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/schemaversion"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/localstore"
 	"github.com/pingcap/tidb/store/localstore/goleveldb"
@@ -194,7 +194,7 @@ func (s *testSuite) TestScan(c *C) {
 	alloc := autoid.NewAllocator(s.store, s.dbInfo.ID)
 	tb, err := tables.TableFromMeta(alloc, s.tbInfo)
 	c.Assert(err, IsNil)
-	schemaversion.Set(s.ctx, 1)
+	binloginfo.SetSchemaVersion(s.ctx, 1)
 	indices := tb.Indices()
 	_, err = tb.AddRecord(s.ctx, types.MakeDatums(1, 10, 11))
 	c.Assert(err, IsNil)

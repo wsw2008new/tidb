@@ -11,12 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package schemaversion
+package binloginfo
 
 import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/context"
+	"github.com/pingcap/tipb/go-binlog"
 )
+
+var Enable = true
 
 // keyType is a dummy type to avoid naming collision in context.
 type keyType int
@@ -26,18 +29,37 @@ func (k keyType) String() string {
 	return "schema_version"
 }
 
-const key keyType = 0
+const (
+	schemaVersionKey keyType = 0
+	binlogKey        keyType = 1
+)
 
 // Set sets schema version to a context.
-func Set(ctx context.Context, version int64) {
-	ctx.SetValue(key, version)
+func SetSchemaVersion(ctx context.Context, version int64) {
+	ctx.SetValue(schemaVersionKey, version)
 }
 
 // Get gets schema version in a context.
-func Get(ctx context.Context) int64 {
-	v, ok := ctx.Value(key).(int64)
+func GetSchemaVersion(ctx context.Context) int64 {
+	v, ok := ctx.Value(schemaVersionKey).(int64)
 	if !ok {
 		log.Error("get schema version failed")
 	}
 	return v
+}
+
+// GetBinlog gets binlog in a context.
+func GetBinlog(ctx context.Context, createIfNotExists bool) *binlog.Binlog {
+	v, ok := ctx.Value(binlogKey).(*binlog.Binlog)
+	if !ok && createIfNotExists {
+		schemaVer := GetSchemaVersion(ctx)
+		v = &binlog.Binlog{SchemaVersion: schemaVer}
+		ctx.SetValue(binlogKey, v)
+	}
+	return v
+}
+
+// ClearBinlog clears binlog in a context.
+func ClearBinlog(ctx context.Context) {
+	ctx.ClearValue(binlogKey)
 }

@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tidb/privilege/privileges"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/autocommit"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/db"
 	"github.com/pingcap/tidb/sessionctx/forupdate"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -189,7 +190,7 @@ func (s *session) finishTxn(rollback bool) error {
 		s.ClearValue(executor.DirtyDBKey)
 		s.txn = nil
 		sessVar.SetStatusFlag(mysql.ServerStatusInTrans, false)
-		sessVar.Binlog = nil
+		binloginfo.ClearBinlog(s)
 		// Update tps metrics
 		if !variable.GetSessionVars(s).RetryInfo.Retrying {
 			tpsMetrics.Add(1)
@@ -201,12 +202,15 @@ func (s *session) finishTxn(rollback bool) error {
 		s.cleanRetryInfo()
 		return s.txn.Rollback()
 	}
-	if sessVar.Binlog != nil {
-		binlogData, err := sessVar.Binlog.Marshal()
-		if err != nil {
-			return errors.Trace(err)
+	if binloginfo.Enable {
+		bin := binloginfo.GetBinlog(s, false)
+		if bin != nil {
+			binlogData, err := bin.Marshal()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			s.txn.SetOption(kv.BinlogData, binlogData)
 		}
-		s.txn.SetOption(kv.BinlogData, binlogData)
 	}
 	err := s.txn.Commit()
 	if err != nil {

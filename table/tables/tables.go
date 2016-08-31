@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/schemaversion"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
@@ -233,8 +233,10 @@ func (t *Table) UpdateRecord(ctx context.Context, h int64, oldData []types.Datum
 	if err != nil {
 		return errors.Trace(err)
 	}
-	mutation := t.getMutation(ctx)
-	mutation.UpdatedIds = append(mutation.UpdatedIds, h)
+	if binloginfo.Enable {
+		mutation := t.getMutation(ctx)
+		mutation.UpdatedIds = append(mutation.UpdatedIds, h)
+	}
 	return nil
 }
 
@@ -362,8 +364,10 @@ func (t *Table) AddRecord(ctx context.Context, r []types.Datum) (recordID int64,
 	if err = bs.SaveTo(txn); err != nil {
 		return 0, errors.Trace(err)
 	}
-	mutation := t.getMutation(ctx)
-	mutation.InsertedIds = append(mutation.InsertedIds, recordID)
+	if binloginfo.Enable {
+		mutation := t.getMutation(ctx)
+		mutation.InsertedIds = append(mutation.InsertedIds, recordID)
+	}
 	variable.GetSessionVars(ctx).AddAffectedRows(1)
 	return recordID, nil
 }
@@ -521,34 +525,36 @@ func (t *Table) RemoveRecord(ctx context.Context, h int64, r []types.Datum) erro
 	if err != nil {
 		return errors.Trace(err)
 	}
-	mutation := t.getMutation(ctx)
-	if t.meta.PKIsHandle {
-		mutation.DeletedIds = append(mutation.DeletedIds, h)
-	} else {
-		var primaryIdx *model.IndexInfo
-		for _, idx := range t.meta.Indices {
-			if idx.Primary {
-				primaryIdx = idx
-				break
-			}
-		}
-		var data []byte
-		if primaryIdx != nil {
-			indexedValues := make([]types.Datum, len(primaryIdx.Columns))
-			for i := range indexedValues {
-				indexedValues[i] = r[primaryIdx.Columns[i].Offset]
-			}
-			data, err = codec.EncodeKey(nil, indexedValues...)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			mutation.DeletedPks = append(mutation.DeletedPks, data)
+	if binloginfo.Enable {
+		mutation := t.getMutation(ctx)
+		if t.meta.PKIsHandle {
+			mutation.DeletedIds = append(mutation.DeletedIds, h)
 		} else {
-			data, err = codec.EncodeValue(nil, r...)
-			if err != nil {
-				return errors.Trace(err)
+			var primaryIdx *model.IndexInfo
+			for _, idx := range t.meta.Indices {
+				if idx.Primary {
+					primaryIdx = idx
+					break
+				}
 			}
-			mutation.DeletedRows = append(mutation.DeletedRows, data)
+			var data []byte
+			if primaryIdx != nil {
+				indexedValues := make([]types.Datum, len(primaryIdx.Columns))
+				for i := range indexedValues {
+					indexedValues[i] = r[primaryIdx.Columns[i].Offset]
+				}
+				data, err = codec.EncodeKey(nil, indexedValues...)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				mutation.DeletedPks = append(mutation.DeletedPks, data)
+			} else {
+				data, err = codec.EncodeValue(nil, r...)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				mutation.DeletedRows = append(mutation.DeletedRows, data)
+			}
 		}
 	}
 	return nil
@@ -702,12 +708,7 @@ func (t *Table) Seek(ctx context.Context, h int64) (int64, bool, error) {
 }
 
 func (t *Table) getMutation(ctx context.Context) *binlog.TableMutation {
-	sessVar := variable.GetSessionVars(ctx)
-	if sessVar.Binlog == nil {
-		schemaVer := schemaversion.Get(ctx)
-		sessVar.Binlog = &binlog.Binlog{SchemaVersion: schemaVer}
-	}
-	bin := sessVar.Binlog
+	bin := binloginfo.GetBinlog(ctx, true)
 	for i := range bin.Mutations {
 		if bin.Mutations[i].TableId == t.ID {
 			return &bin.Mutations[i]
