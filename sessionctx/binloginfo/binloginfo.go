@@ -26,7 +26,10 @@ type keyType int
 
 // String defines a Stringer function for debugging and pretty printing.
 func (k keyType) String() string {
-	return "schema_version"
+	if k == schemaVersionKey {
+		return "schema_version"
+	}
+	return "binlog"
 }
 
 const (

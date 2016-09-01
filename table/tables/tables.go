@@ -526,35 +526,41 @@ func (t *Table) RemoveRecord(ctx context.Context, h int64, r []types.Datum) erro
 		return errors.Trace(err)
 	}
 	if binloginfo.Enable {
-		mutation := t.getMutation(ctx)
-		if t.meta.PKIsHandle {
-			mutation.DeletedIds = append(mutation.DeletedIds, h)
+		err = t.addDeleteBinlog(ctx, h, r)
+	}
+	return errors.Trace(err)
+}
+
+func (t *Table) addDeleteBinlog(ctx context.Context, h int64, r []types.Datum) error {
+	mutation := t.getMutation(ctx)
+	if t.meta.PKIsHandle {
+		mutation.DeletedIds = append(mutation.DeletedIds, h)
+	} else {
+		var primaryIdx *model.IndexInfo
+		for _, idx := range t.meta.Indices {
+			if idx.Primary {
+				primaryIdx = idx
+				break
+			}
+		}
+		var data []byte
+		var err error
+		if primaryIdx != nil {
+			indexedValues := make([]types.Datum, len(primaryIdx.Columns))
+			for i := range indexedValues {
+				indexedValues[i] = r[primaryIdx.Columns[i].Offset]
+			}
+			data, err = codec.EncodeKey(nil, indexedValues...)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			mutation.DeletedPks = append(mutation.DeletedPks, data)
 		} else {
-			var primaryIdx *model.IndexInfo
-			for _, idx := range t.meta.Indices {
-				if idx.Primary {
-					primaryIdx = idx
-					break
-				}
+			data, err = codec.EncodeValue(nil, r...)
+			if err != nil {
+				return errors.Trace(err)
 			}
-			var data []byte
-			if primaryIdx != nil {
-				indexedValues := make([]types.Datum, len(primaryIdx.Columns))
-				for i := range indexedValues {
-					indexedValues[i] = r[primaryIdx.Columns[i].Offset]
-				}
-				data, err = codec.EncodeKey(nil, indexedValues...)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				mutation.DeletedPks = append(mutation.DeletedPks, data)
-			} else {
-				data, err = codec.EncodeValue(nil, r...)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				mutation.DeletedRows = append(mutation.DeletedRows, data)
-			}
+			mutation.DeletedRows = append(mutation.DeletedRows, data)
 		}
 	}
 	return nil
